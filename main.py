@@ -1,232 +1,170 @@
 import os
-import re
 import json
-import time
 import requests
 from bs4 import BeautifulSoup
+from urllib.parse import quote
 
 # =========================
-# 設定
+# CONFIG
 # =========================
-
-SEARCH_URL = (
-    "https://www.amazon.co.jp/s?k="
-    "%E3%80%90%E5%88%9D%E5%9B%9E%E7%94%9F%E7%94%A3%E9%99%90%E5%AE%9A%E3%80%91+"
-    "BOX+%E3%81%8A%E3%81%AD%E3%81%8C%E3%81%84%E3%82%A2%E3%82%A4%E3%83%97%E3%83%AA+"
-    "%E3%82%A2%E3%82%A4%E3%83%97%E3%83%AA%E3%82%AB%E3%83%BC%E3%83%89%E2%99%AA%E3%82%B3%E3%83%AC%E3%82%AF%E3%82%B7%E3%83%A7%E3%83%B3%E3%82%B0%E3%83%9F"
-)
 
 DISCORD_WEBHOOK_URL = os.environ.get("DISCORD_WEBHOOK_URL")
 
-STATE_FILE = "state.json"
+QUERY = 'site:amazon.co.jp "アイプリカード♪コレクショングミ"'
 
-CHECK_INTERVAL = 60 * 30  # 30分
+CHECK_WORDS = [
+    "vol.2",
+]
 
-TEST_MODE = False
+SEARCH_URL = (
+    "https://www.google.com/search?q="
+    + quote(QUERY)
+)
 
 HEADERS = {
     "User-Agent": (
         "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
         "AppleWebKit/537.36 (KHTML, like Gecko) "
-        "Chrome/120.0 Safari/537.36"
+        "Chrome/124.0.0.0 Safari/537.36"
     ),
     "Accept-Language": "ja-JP,ja;q=0.9",
 }
 
+STATE_FILE = "state.json"
+
 # =========================
-# state管理
+# UTIL
 # =========================
 
 def load_state():
     if not os.path.exists(STATE_FILE):
-        return {"asins": []}
-    try:
-        with open(STATE_FILE, "r") as f:
-            return json.load(f)
-    except:
-        return {"asins": []}
+        return {"seen": []}
+
+    with open(STATE_FILE, "r", encoding="utf-8") as f:
+        return json.load(f)
 
 
 def save_state(state):
-    with open(STATE_FILE, "w") as f:
+    with open(STATE_FILE, "w", encoding="utf-8") as f:
         json.dump(state, f, ensure_ascii=False, indent=2)
 
 
-# =========================
-# Discord通知
-# =========================
-
-def notify_discord(title, url):
+def notify_discord(message):
     if not DISCORD_WEBHOOK_URL:
-        print("Webhook not set")
+        print("DISCORD_WEBHOOK_URL is missing")
         return
 
-    try:
-        payload = {
-            "content": f"🎉 新商品検知\n**{title}**\n{url}"
-        }
-        requests.post(DISCORD_WEBHOOK_URL, json=payload, timeout=10)
-    except Exception as e:
-        print("Discord error:", e)
+    r = requests.post(
+        DISCORD_WEBHOOK_URL,
+        json={"content": message},
+        timeout=20
+    )
+
+    print("Discord status:", r.status_code)
 
 
 # =========================
-# Amazon取得
+# GOOGLE SEARCH
 # =========================
 
 def fetch_html():
-    if TEST_MODE:
-        # 必ずヒットするAmazon商品ページ
-        url = "https://www.amazon.co.jp/s?k=iphone"
-    else:
-        url = SEARCH_URL
+    r = requests.get(
+        SEARCH_URL,
+        headers=HEADERS,
+        timeout=20
+    )
 
-    r = requests.get(url, headers=HEADERS, timeout=20)
     r.raise_for_status()
+
     return r.text
 
-# =========================
-# 商品抽出
-# =========================
 
-def extract_items(html):
+def extract_results(html):
     soup = BeautifulSoup(html, "html.parser")
 
-    items = []
-    seen = set()
+    results = []
 
-    results = soup.select('div.s-result-item[data-asin]')
+    for a in soup.select("a"):
+        href = a.get("href", "")
 
-    print("RESULT BLOCKS:", len(results))
-
-    for div in results:
-        asin = div.get("data-asin", "").strip()
-
-        if not asin or len(asin) != 10:
+        # Google検索結果リンク
+        if not href.startswith("/url?q="):
             continue
 
-        if asin in seen:
+        title = a.get_text(" ", strip=True)
+
+        if not title:
             continue
 
-        title_elem = div.select_one("h2 span")
+        url = href.split("/url?q=")[1].split("&")[0]
 
-        if not title_elem:
+        # Amazonだけ
+        if "amazon.co.jp" not in url:
             continue
 
-        title = title_elem.get_text(strip=True)
-
-        if len(title) < 3:
+        # 商品ページ優先
+        if "/dp/" not in url:
             continue
 
-        seen.add(asin)
-
-        item = {
-            "asin": asin,
+        results.append({
             "title": title,
-            "url": f"https://www.amazon.co.jp/dp/{asin}"
-        }
+            "url": url,
+        })
 
-        print("FOUND:", item)
-
-        items.append(item)
-
-    return items
+    return results
 
 
 # =========================
-# 判定ロジック
+# FILTER
 # =========================
 
 def is_target(title):
-    if TEST_MODE:
-        return True
-    else:
-        keywords = [
-            "アイプリ",
-            "コレクショングミ",
-            "BOX",
-            "初回",
-        ]
+    t = title.lower()
 
-        t = title.lower()
+    for word in CHECK_WORDS:
+        if word.lower() not in t:
+            return False
 
-        return all(k.lower() in t for k in keywords)
-
-# =========================
-# 初期確認処理
-# =========================
-
-def send_startup():
-    try:
-        requests.post(
-            DISCORD_WEBHOOK_URL,
-            json={"content": "🟢 Amazon監視開始（正常稼働中）"},
-            timeout=10
-        )
-    except Exception as e:
-        print("startup notify failed:", e)
-# =========================
-# ハートビート処理
-# =========================
-
-def heartbeat():
-    try:
-        requests.post(
-            DISCORD_WEBHOOK_URL,
-            json={"content": "💓 監視正常稼働中"},
-            timeout=10
-        )
-    except:
-        pass 
-# =========================
-# メイン処理
-# =========================
-
-def run_once(state):
-    try:
-        html = fetch_html()
-        items = extract_items(html)
-        print("HTML LENGTH:", len(html))
-        print("ITEM COUNT:", len(items))
-
-        for item in items:
-            asin = item["asin"]
-            title = item["title"]
-            url = item["url"]
-
-            if asin in state["asins"]:
-                continue
-
-            if not is_target(title):
-                continue
-
-            print("NEW:", title)
-            print(url)
-
-            notify_discord(title, url)
-
-            state["asins"].append(asin)
-
-    except Exception as e:
-        print("ERROR:", e)
+    return True
 
 
 # =========================
-# メインループ
+# MAIN
 # =========================
 
 def main():
     print("🟢 SCRIPT STARTED")
-    send_startup()
 
     state = load_state()
 
-    run_once(state)
+    html = fetch_html()
+
+    print("HTML LENGTH:", len(html))
+
+    results = extract_results(html)
+
+    print("RESULT COUNT:", len(results))
+
+    for item in results:
+        print("CHECK:", item["title"])
+
+        if not is_target(item["title"]):
+            continue
+
+        uid = item["url"]
+
+        if uid in state["seen"]:
+            continue
+
+        state["seen"].append(uid)
+
+        notify_discord(
+            "🎉 新商品検知\n\n"
+            f"{item['title']}\n"
+            f"{item['url']}"
+        )
 
     save_state(state)
-
-    if int(time.time()) % (60 * 60 * 6) < 30:
-            heartbeat()
 
     print("✅ SCRIPT FINISHED")
 
