@@ -126,16 +126,19 @@ def extract_items(html):
 # =========================
 
 def is_target(title):
-    keywords = [
-        "アイプリ",
-        "コレクショングミ",
-        "BOX",
-        "初回",
-    ]
+    if TEST_MODE:
+        return True
+    else:
+        keywords = [
+            "アイプリ",
+            "コレクショングミ",
+            "BOX",
+            "初回",
+        ]
 
-    t = title.lower()
+        t = title.lower()
 
-    return all(k.lower() in t for k in keywords)
+        return all(k.lower() in t for k in keywords)
 
 # =========================
 # 初期確認処理
