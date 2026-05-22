@@ -77,7 +77,7 @@ def notify_discord(title, url):
 def fetch_html():
     if TEST_MODE:
         # 必ずヒットするAmazon商品ページ
-        url = "https://www.amazon.co.jp/dp/B08N5WRWNW"
+        url = "https://www.amazon.co.jp/s?k=iphone"
     else:
         url = SEARCH_URL
 
@@ -200,7 +200,6 @@ def run_once(state):
 
 def main():
     print("🟢 SCRIPT STARTED")
-    print("WEBHOOK:", DISCORD_WEBHOOK_URL)
     send_startup()
 
     state = load_state()
