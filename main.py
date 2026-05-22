@@ -22,7 +22,7 @@ STATE_FILE = "state.json"
 
 CHECK_INTERVAL = 60 * 30  # 30分
 
-TEST_MODE = True
+TEST_MODE = False
 
 HEADERS = {
     "User-Agent": (
