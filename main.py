@@ -3,6 +3,7 @@ import json
 import requests
 from bs4 import BeautifulSoup
 from urllib.parse import quote
+from datetime import datetime
 
 # =========================
 # CONFIG
@@ -78,12 +79,77 @@ def fetch_html():
 
     return r.text
 
+# =========================
+# NOTIFY CONTROL
+# =========================
+
+ERROR_STATE_FILE = "error_state.json"
+
+
+def load_error_state():
+    if not os.path.exists(ERROR_STATE_FILE):
+        return {
+            "last_error": False,
+            "last_start_notify_date": ""
+        }
+
+    with open(ERROR_STATE_FILE, "r", encoding="utf-8") as f:
+        return json.load(f)
+
+
+def save_error_state(state):
+    with open(ERROR_STATE_FILE, "w", encoding="utf-8") as f:
+        json.dump(state, f, ensure_ascii=False, indent=2)
+
+
+def send_morning_notification(error_state):
+    now = datetime.now()
+
+    today = now.strftime("%Y-%m-%d")
+    hour = now.hour
+
+    # 朝7〜9時のみ
+    if hour < 6 or hour >= 10:
+        return
+
+    # 今日すでに送信済み
+    if error_state["last_start_notify_date"] == today:
+        return
+
+    notify_discord("🟢 aipri watcher 正常稼働中")
+
+    error_state["last_start_notify_date"] = today
+
+    save_error_state(error_state)
+
+def handle_error(error_state, message):
+    # すでにエラー中なら通知しない
+    if error_state["last_error"]:
+        print("already in error state")
+        return
+
+    notify_discord(f"⚠ watcher error\n\n{message}")
+
+    error_state["last_error"] = True
+
+    save_error_state(error_state)
+
+
+def clear_error_state(error_state):
+    if not error_state["last_error"]:
+        return
+
+    notify_discord("🟢 watcher recovered")
+
+    error_state["last_error"] = False
+
+    save_error_state(error_state)
 
 def extract_results(html):
     soup = BeautifulSoup(html, "html.parser")
 
     results = []
-
+    
     for a in soup.select("a"):
         href = a.get("href", "")
 
@@ -135,36 +201,48 @@ def is_target(title):
 def main():
     print("🟢 SCRIPT STARTED")
 
-    state = load_state()
+    error_state = load_error_state()
 
-    html = fetch_html()
+    send_morning_notification(error_state)
 
-    print("HTML LENGTH:", len(html))
+    try:
+        state = load_state()
 
-    results = extract_results(html)
+        html = fetch_html()
 
-    print("RESULT COUNT:", len(results))
+        print("HTML LENGTH:", len(html))
 
-    for item in results:
-        print("CHECK:", item["title"])
+        results = extract_results(html)
 
-        if not is_target(item["title"]):
-            continue
+        print("RESULT COUNT:", len(results))
 
-        uid = item["url"]
+        for item in results:
+            print("CHECK:", item["title"])
 
-        if uid in state["seen"]:
-            continue
+            if not is_target(item["title"]):
+                continue
 
-        state["seen"].append(uid)
+            uid = item["url"]
 
-        notify_discord(
-            "🎉 新商品検知\n\n"
-            f"{item['title']}\n"
-            f"{item['url']}"
-        )
+            if uid in state["seen"]:
+                continue
 
-    save_state(state)
+            state["seen"].append(uid)
+
+            notify_discord(
+                "🎉 新商品検知\n\n"
+                f"{item['title']}\n"
+                f"{item['url']}"
+            )
+
+        save_state(state)
+
+        clear_error_state(error_state)
+
+    except Exception as e:
+        print("ERROR:", e)
+
+        handle_error(error_state, str(e))
 
     print("✅ SCRIPT FINISHED")
 

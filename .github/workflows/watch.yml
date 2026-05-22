@@ -1,9 +1,13 @@
-name: Amazon Watcher
+name: aipri-gumi-checker
 
 on:
   schedule:
-    - cron: "*/30 * * * *"
+    - cron: "0 */2 * * *"
   workflow_dispatch:
+
+concurrency:
+  group: aipri-check
+  cancel-in-progress: true
 
 jobs:
   run:
@@ -12,13 +16,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Setup Python
-        uses: actions/setup-python@v5
+      - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
-      - name: Install dependencies
-        run: pip install -r requirements.txt
+      - run: pip install -r requirements.txt
 
       - name: Run watcher
         env:
