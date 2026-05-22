@@ -200,6 +200,8 @@ def run_once(state):
 
 def main():
     print("Watcher started")
+    print("🟢 SCRIPT STARTED")
+    print("WEBHOOK:", DISCORD_WEBHOOK_URL)
     send_startup()
     while True:
         state = load_state()
