@@ -95,28 +95,40 @@ def extract_items(html):
     items = []
     seen = set()
 
-    for a in soup.select("a[href*='/dp/']"):
-        href = a.get("href", "")
-        text = a.get_text(" ", strip=True)
+    results = soup.select('div.s-result-item[data-asin]')
 
-        m = re.search(r"/dp/([A-Z0-9]{10})", href)
-        if not m:
+    print("RESULT BLOCKS:", len(results))
+
+    for div in results:
+        asin = div.get("data-asin", "").strip()
+
+        if not asin or len(asin) != 10:
             continue
-
-        asin = m.group(1)
 
         if asin in seen:
             continue
-        seen.add(asin)
 
-        if len(text) < 5:
+        title_elem = div.select_one("h2 span")
+
+        if not title_elem:
             continue
 
-        items.append({
+        title = title_elem.get_text(strip=True)
+
+        if len(title) < 3:
+            continue
+
+        seen.add(asin)
+
+        item = {
             "asin": asin,
-            "title": text,
+            "title": title,
             "url": f"https://www.amazon.co.jp/dp/{asin}"
-        })
+        }
+
+        print("FOUND:", item)
+
+        items.append(item)
 
     return items
 
