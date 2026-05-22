@@ -22,6 +22,8 @@ STATE_FILE = "state.json"
 
 CHECK_INTERVAL = 60 * 30  # 30分
 
+TEST_MODE = True
+
 HEADERS = {
     "User-Agent": (
         "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
@@ -73,10 +75,15 @@ def notify_discord(title, url):
 # =========================
 
 def fetch_html():
-    r = requests.get(SEARCH_URL, headers=HEADERS, timeout=20)
+    if TEST_MODE:
+        # 必ずヒットするAmazon商品ページ
+        url = "https://www.amazon.co.jp/dp/B08N5WRWNW"
+    else:
+        url = SEARCH_URL
+
+    r = requests.get(url, headers=HEADERS, timeout=20)
     r.raise_for_status()
     return r.text
-
 
 # =========================
 # 商品抽出
@@ -130,7 +137,32 @@ def is_target(title):
 
     return all(k.lower() in t for k in keywords)
 
+# =========================
+# 初期確認処理
+# =========================
 
+def send_startup():
+    try:
+        requests.post(
+            DISCORD_WEBHOOK_URL,
+            json={"content": "🟢 Amazon監視開始（正常稼働中）"},
+            timeout=10
+        )
+    except Exception as e:
+        print("startup notify failed:", e)
+# =========================
+# ハートビート処理
+# =========================
+
+def heartbeat():
+    try:
+        requests.post(
+            DISCORD_WEBHOOK_URL,
+            json={"content": "💓 監視正常稼働中"},
+            timeout=10
+        )
+    except:
+        pass 
 # =========================
 # メイン処理
 # =========================
@@ -168,13 +200,16 @@ def run_once(state):
 
 def main():
     print("Watcher started")
-
+    send_startup()
     while True:
         state = load_state()
 
         run_once(state)
 
         save_state(state)
+
+        if int(time.time()) % (60 * 60 * 6) < 30:
+            heartbeat()
 
         time.sleep(CHECK_INTERVAL)
 
