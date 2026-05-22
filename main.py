@@ -174,6 +174,8 @@ def run_once(state):
     try:
         html = fetch_html()
         items = extract_items(html)
+        print("HTML LENGTH:", len(html))
+        print("ITEM COUNT:", len(items))
 
         for item in items:
             asin = item["asin"]
