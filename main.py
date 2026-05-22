@@ -200,6 +200,7 @@ def run_once(state):
 
 def main():
     print("🟢 SCRIPT STARTED")
+    print("WEBHOOK:", DISCORD_WEBHOOK_URL)
     send_startup()
 
     state = load_state()
