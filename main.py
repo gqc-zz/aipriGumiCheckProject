@@ -199,21 +199,19 @@ def run_once(state):
 # =========================
 
 def main():
-    print("Watcher started")
     print("🟢 SCRIPT STARTED")
-    print("WEBHOOK:", DISCORD_WEBHOOK_URL)
     send_startup()
-    while True:
-        state = load_state()
 
-        run_once(state)
+    state = load_state()
 
-        save_state(state)
+    run_once(state)
 
-        if int(time.time()) % (60 * 60 * 6) < 30:
+    save_state(state)
+
+    if int(time.time()) % (60 * 60 * 6) < 30:
             heartbeat()
 
-        time.sleep(CHECK_INTERVAL)
+    print("✅ SCRIPT FINISHED")
 
 
 if __name__ == "__main__":
