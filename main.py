@@ -3,8 +3,7 @@ import json
 import requests
 from bs4 import BeautifulSoup
 from urllib.parse import quote
-from datetime import datetime
-
+from datetime import datetime, timezone, timedelta
 # =========================
 # CONFIG
 # =========================
@@ -32,6 +31,8 @@ HEADERS = {
 }
 
 STATE_FILE = "state.json"
+
+JST = timezone(timedelta(hours=9))
 
 # =========================
 # UTIL
@@ -63,6 +64,8 @@ def notify_discord(message):
 
     print("Discord status:", r.status_code)
 
+def now_jst():
+    return datetime.now(JST)
 
 # =========================
 # GOOGLE SEARCH
@@ -103,7 +106,7 @@ def save_error_state(state):
 
 
 def send_morning_notification(error_state):
-    now = datetime.now()
+    now = now_jst()
 
     today = now.strftime("%Y-%m-%d")
     hour = now.hour
