@@ -153,32 +153,42 @@ def extract_results(html):
 
     results = []
     
-    for a in soup.select("a"):
+    # 検索結果ブロック
+    for div in soup.select("div.g"):
+
+        a = div.select_one("a")
+
+        if not a:
+            continue
+
         href = a.get("href", "")
 
-        # Google検索結果リンク
-        if not href.startswith("/url?q="):
+        if "amazon.co.jp" not in href:
             continue
 
-        title = a.get_text(" ", strip=True)
-
-        if not title:
+        if "/dp/" not in href:
             continue
 
-        url = href.split("/url?q=")[1].split("&")[0]
+        title_elem = div.select_one("h3")
 
-        # Amazonだけ
-        if "amazon.co.jp" not in url:
+        if not title_elem:
             continue
 
-        # 商品ページ優先
-        if "/dp/" not in url:
-            continue
+        title = title_elem.get_text(" ", strip=True)
+
+        # スニペット取得
+        snippet_elem = div.select_one(".VwiC3b")
+
+        snippet = ""
+        if snippet_elem:
+            snippet = snippet_elem.get_text(" ", strip=True)
 
         results.append({
             "title": title,
-            "url": url,
+            "snippet": snippet,
+            "url": href,
         })
+
 
     return results
 
@@ -222,7 +232,11 @@ def main():
         for item in results:
             print("CHECK:", item["title"])
 
-            if not is_target(item["title"]):
+            text = (
+                item["title"] + " " +
+                item["snippet"]
+            )
+            if not is_target(text):
                 continue
 
             uid = item["url"]
